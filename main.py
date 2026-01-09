@@ -105,4 +105,6 @@ async def deafen(ctx, member: discord.Member):
     await member.edit(deafen=True)
     await ctx.send(f'🎧 {member.mention} کرا بە Deafen.')
 
-bot.run(TOKEN)
+# ئەمە دێڕی کۆتایی فایلەکەتە، ئاوا چاکی بکە:
+bot.run(os.getenv('DISCORD_TOKEN'))
+
