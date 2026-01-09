@@ -1,0 +1,108 @@
+import discord
+from discord.ext import commands
+import yt_dlp
+import asyncio
+import os
+from dotenv import load_dotenv
+from gtts import gTTS
+
+load_dotenv()
+TOKEN = os.getenv('DISCORD_TOKEN')
+
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+
+# --- ڕێکخستنی میوزیک ---
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0',
+    'cookiefile': 'cookies.txt'
+}
+
+ffmpeg_options = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'options': '-vn',
+}
+
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+
+@bot.event
+async def on_ready():
+    print(f'✅ بۆتەکە ئامادەیە: {bot.user.name}')
+
+# --- ١. بەخێرهاتنی دەنگی (Welcome Voice) ---
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.id == bot.user.id: return
+    if before.channel is None and after.channel is not None:
+        try:
+            vc = await after.channel.connect()
+            tts = gTTS(text="Welcome to Dark Zone Store", lang='en')
+            tts.save("welcome.mp3")
+            vc.play(discord.FFmpegPCMAudio("welcome.mp3"))
+            while vc.is_playing(): await asyncio.sleep(1)
+            await vc.disconnect()
+        except Exception as e:
+            print(f"Error in welcome voice: {e}")
+
+# --- ٢. لیستی فەرمانەکان بە ژمارە (!help) ---
+@bot.command()
+async def help(ctx):
+    embed = discord.Embed(title="📋 لیستی فەرمانەکانی Dark Zone", color=discord.Color.gold())
+    embed.add_field(name="1️⃣ !play [ناو]", value="لێدانی میوزیک", inline=False)
+    embed.add_field(name="2️⃣ !say [دەق]", value="بۆتەکە قسە دەکات", inline=False)
+    embed.add_field(name="3️⃣ !clear [ژمارە]", value="سڕینەوەی چات", inline=False)
+    embed.add_field(name="4️⃣ !ban @user", value="باند کردنی ئەندام", inline=False)
+    embed.add_field(name="5️⃣ !mute / !deafen", value="بێدەنگ کردن لە ڤۆیس", inline=False)
+    embed.set_footer(text="سیستەمی بەخێرهاتنی دەنگی خۆکارانە کار دەکات.")
+    await ctx.send(embed=embed)
+
+# --- ٣. فەرمانەکانی میوزیک و قسەکردن ---
+@bot.command()
+async def play(ctx, *, search):
+    if not ctx.author.voice: return await ctx.send("❌ بڕۆ ناو ڤۆیس!")
+    if not ctx.voice_client: await ctx.author.voice.channel.connect()
+    info = ytdl.extract_info(f"ytsearch:{search}", download=False)['entries'][0]
+    ctx.voice_client.play(discord.FFmpegPCMAudio(info['url'], **ffmpeg_options))
+    await ctx.send(f'🎵 لێدەدرێت: **{info["title"]}**')
+
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client: await ctx.voice_client.disconnect()
+
+@bot.command()
+async def say(ctx, *, text):
+    if not ctx.author.voice: return
+    if not ctx.voice_client: await ctx.author.voice.channel.connect()
+    gTTS(text=text, lang='en').save("say.mp3")
+    ctx.voice_client.play(discord.FFmpegPCMAudio("say.mp3"))
+
+# --- ٤. فەرمانەکانی بەڕێوەبردن ---
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int):
+    await ctx.channel.purge(limit=amount + 1)
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member):
+    await member.ban()
+    await ctx.send(f'🚫 {member.mention} باند کرا.')
+
+@bot.command()
+@commands.has_permissions(mute_members=True)
+async def mute(ctx, member: discord.Member):
+    await member.edit(mute=True)
+    await ctx.send(f'🔇 {member.mention} بێدەنگ کرا.')
+
+@bot.command()
+@commands.has_permissions(mute_members=True)
+async def deafen(ctx, member: discord.Member):
+    await member.edit(deafen=True)
+    await ctx.send(f'🎧 {member.mention} کرا بە Deafen.')
+
+bot.run(TOKEN)
